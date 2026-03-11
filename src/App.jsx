@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, Clock, Baby, Utensils, RotateCcw, CheckCircle2, Check, Edit2, X, LogIn, LogOut } from 'lucide-react';
+import { Moon, Sun, Clock, Baby, Utensils, CheckCircle2, Check, Edit2, X, LogIn, LogOut } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signInWithCustomToken, signInAnonymously, signOut } from 'firebase/auth';
 import { getFirestore, doc, setDoc, onSnapshot } from 'firebase/firestore';
@@ -50,7 +50,6 @@ export default function App() {
   const [tempSleepTime, setTempSleepTime] = useState('');
   const [editingFeed, setEditingFeed] = useState(false);
   const [tempFeedTime, setTempFeedTime] = useState('');
-  const [confirmReset, setConfirmReset] = useState(false);
 
   // --- Authentication & Live Sync ---
   useEffect(() => {
@@ -182,14 +181,6 @@ export default function App() {
     updateRemoteState({ lastFeed: newLastFeed.getTime() });
   };
 
-  const executeReset = () => {
-    setSleepStart(null);
-    setLastFeed(null);
-    setIsAsleep(false);
-    setConfirmReset(false);
-    updateRemoteState({ sleepStart: null, lastFeed: null, isAsleep: false });
-  };
-
   const handleEditSleep = () => {
     const newDate = updateDateFromTime(tempSleepTime);
     setSleepStart(newDate);
@@ -247,7 +238,8 @@ export default function App() {
     const getOptimalCycle = (targetTime) => {
       let optimal = sleepData.cycles[0];
       for (const cycle of sleepData.cycles) {
-        if (cycle.time <= targetTime || getDiffInMinutes(cycle.time, targetTime) > -15) {
+        // Strictly only accept cycles that end BEFORE or EXACTLY AT the feed due time
+        if (cycle.time <= targetTime) {
           optimal = cycle;
         } else {
           break; 
@@ -351,20 +343,23 @@ export default function App() {
                 <div>
                   <div className="text-2xl font-bold text-indigo-400">{formatDuration(sleepData?.timeAsleep || 0)}</div>
                   {editingSleep ? (
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-col gap-2 mt-2 pr-2">
                       <input 
                         type="time" 
                         autoFocus
                         value={tempSleepTime} 
                         onChange={(e) => setTempSleepTime(e.target.value)}
-                        className="bg-slate-700 text-white px-2 py-1.5 rounded-md text-sm border border-slate-600 outline-none focus:border-indigo-500 w-[140px]"
+                        onKeyDown={(e) => e.key === 'Enter' && handleEditSleep()}
+                        className="bg-slate-700 text-white px-2 py-1.5 rounded-md text-sm border border-slate-600 outline-none focus:border-indigo-500 w-full"
                       />
-                      <button onClick={handleEditSleep} className="p-1.5 bg-green-500/20 hover:bg-green-500/30 rounded-md text-green-400 transition-colors">
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setEditingSleep(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-md text-slate-300 transition-colors">
-                        <X className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={handleEditSleep} className="flex-1 py-1.5 bg-green-500/20 hover:bg-green-500/30 rounded-md text-green-400 transition-colors flex justify-center">
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setEditingSleep(false)} className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-md text-slate-300 transition-colors flex justify-center">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 mt-1 text-xs text-slate-500">
@@ -390,20 +385,23 @@ export default function App() {
                     {formatDuration(feedData.timeSinceFeed)} ago
                   </div>
                   {editingFeed ? (
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-col gap-2 mt-2 pr-2">
                       <input 
                         type="time" 
                         autoFocus
                         value={tempFeedTime} 
                         onChange={(e) => setTempFeedTime(e.target.value)}
-                        className="bg-slate-700 text-white px-2 py-1.5 rounded-md text-sm border border-slate-600 outline-none focus:border-teal-500 w-[140px]"
+                        onKeyDown={(e) => e.key === 'Enter' && handleEditFeed()}
+                        className="bg-slate-700 text-white px-2 py-1.5 rounded-md text-sm border border-slate-600 outline-none focus:border-teal-500 w-full"
                       />
-                      <button onClick={handleEditFeed} className="p-1.5 bg-green-500/20 hover:bg-green-500/30 rounded-md text-green-400 transition-colors">
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setEditingFeed(false)} className="p-1.5 bg-slate-700 hover:bg-slate-600 rounded-md text-slate-300 transition-colors">
-                        <X className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={handleEditFeed} className="flex-1 py-1.5 bg-green-500/20 hover:bg-green-500/30 rounded-md text-green-400 transition-colors flex justify-center">
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setEditingFeed(false)} className="flex-1 py-1.5 bg-slate-700 hover:bg-slate-600 rounded-md text-slate-300 transition-colors flex justify-center">
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1 mt-1 text-xs text-slate-500">
@@ -465,18 +463,27 @@ export default function App() {
               </div>
             )}
 
-            {/* Upcoming Sleep Cycles */}
+            {/* Sleep Cycles Grid */}
             {isAsleep && sleepData && (
               <div className="space-y-3 pt-2">
                 <h3 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
                   <Moon className="w-4 h-4 text-indigo-400" />
-                  Upcoming 45-minute Cycle Ends
+                  45-minute Cycle Ends
                 </h3>
-                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
-                  {sleepData.cycles.filter(c => !c.isPast).slice(0, 3).map((cycle) => (
-                    <div key={cycle.block} className="flex-shrink-0 bg-slate-800 rounded-lg p-3 border border-slate-700 min-w-[100px]">
-                      <div className="text-xs text-slate-400 mb-1">{cycle.duration} {cycle.duration === 1 ? 'minute' : 'minutes'}</div>
-                      <div className="text-lg font-semibold text-white">{formatTime(cycle.time)}</div>
+                <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                  {sleepData.cycles.slice(0, 6).map((cycle) => (
+                    <div 
+                      key={cycle.block} 
+                      className={`rounded-lg p-2 border flex flex-col items-center justify-center text-center transition-all ${
+                        cycle.isPast 
+                          ? 'bg-slate-800/40 border-slate-700/40 opacity-50' 
+                          : 'bg-slate-800 border-slate-700'
+                      }`}
+                    >
+                      <div className="text-[10px] sm:text-xs text-slate-400 mb-1 leading-tight">{cycle.duration} {cycle.duration === 1 ? 'minute' : 'minutes'}</div>
+                      <div className={`text-xs sm:text-sm font-semibold ${cycle.isPast ? 'text-slate-400' : 'text-white'}`}>
+                        {formatTime(cycle.time)}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -505,27 +512,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Reset Data */}
-        {(sleepStart || lastFeed) && (
-          <div className="flex justify-center pt-8">
-            {confirmReset ? (
-              <div className="bg-slate-800 p-3 rounded-xl border border-slate-700 flex items-center gap-4 shadow-lg">
-                <span className="text-sm text-slate-300 font-medium">Clear all times?</span>
-                <button onClick={executeReset} className="px-3 py-1 bg-red-500/20 text-red-400 rounded-lg text-sm font-bold hover:bg-red-500/30 transition-colors">Yes, clear</button>
-                <button onClick={() => setConfirmReset(false)} className="px-3 py-1 text-slate-400 hover:text-white text-sm transition-colors">Cancel</button>
-              </div>
-            ) : (
-              <button 
-                onClick={() => setConfirmReset(true)}
-                className="flex items-center gap-2 text-slate-500 hover:text-slate-300 transition-colors text-sm px-4 py-2"
-              >
-                <RotateCcw className="w-4 h-4" />
-                Reset Tracker
-              </button>
             )}
           </div>
         )}
